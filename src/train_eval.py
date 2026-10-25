@@ -19,7 +19,7 @@ def arima_forecast(series, n_train, order=(2, 0, 1)):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--csv", default="data/synthetic_scada.csv" if os.path.exists("data/synthetic_scada.csv") else None, help="SCADA-style CSV (default: committed synthetic CSV)"); ap.add_argument("--lookback", type=int, default=24)
+    ap.add_argument("--csv", default="data/synthetic/synthetic_scada.csv" if os.path.exists("data/synthetic/synthetic_scada.csv") else None, help="SCADA-style CSV (default: committed synthetic CSV)"); ap.add_argument("--lookback", type=int, default=24)
     ap.add_argument("--epochs", type=int, default=20); ap.add_argument("--quick", action="store_true")
     ap.add_argument("--out", default="results"); a = ap.parse_args()
     if a.quick: a.epochs = 5
@@ -28,7 +28,8 @@ def main():
     X, y = make_windows(df, lookback=a.lookback)
     tr, va, te = chrono_split(len(X))
     sc = Scaler().fit(X[tr]); Xs = sc.transform(X).astype("float32")
-    ym, ys = float(y[tr].mean()), float(y[tr].std()); yn = ((y - ym) / ys).astype("float32")
+    last = X[:, -1, cols.index("wind_speed")]; d = y - last   # residual on persistence
+    ym, ys = float(d[tr].mean()), float(d[tr].std()); yn = ((d - ym) / ys).astype("float32")
     preds_va, preds_te, res = {}, {}, {}
     ws = df["wind_speed"].values; off = a.lookback          # window i targets ws[off+i]
     ar = arima_forecast(ws, off + va.start)
@@ -36,7 +37,7 @@ def main():
     models = {}
     for name, M in {"LSTM": LSTMNet, "CNN-LSTM": CNNLSTM}.items():
         m = fit(M(X.shape[2]), Xs[tr], yn[tr], Xs[va], yn[va], epochs=a.epochs, patience=10); models[name] = m
-        preds_va[name] = predict(m, Xs[va]) * ys + ym; preds_te[name] = predict(m, Xs[te]) * ys + ym
+        preds_va[name] = last[va] + predict(m, Xs[va]) * ys + ym; preds_te[name] = last[te] + predict(m, Xs[te]) * ys + ym
     rm = {k: regression_metrics(y[va], v)["RMSE"] for k, v in preds_va.items()}
     w = {k: (1 / r) / sum(1 / x for x in rm.values()) for k, r in rm.items()}
     preds_te["Ensemble"] = sum(w[k] * preds_te[k] for k in w)
@@ -48,7 +49,7 @@ def main():
                           "final_health_index": hs[-1]["health_index"]}
     os.makedirs("models", exist_ok=True)
     torch.save({"state": models["CNN-LSTM"].state_dict(), "n_features": X.shape[2], "columns": cols,
-                "lookback": a.lookback, "x_mean": sc.m, "x_std": sc.s, "y_mean": ym, "y_std": ys}, "models/cnn_lstm.pt")
+                "lookback": a.lookback, "residual": True, "x_mean": sc.m, "x_std": sc.s, "y_mean": ym, "y_std": ys}, "models/cnn_lstm.pt")
     os.makedirs(a.out, exist_ok=True); json.dump(res, open(f"{a.out}/results.json", "w"), indent=2)
     print(json.dumps(res, indent=2))
 

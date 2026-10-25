@@ -59,6 +59,8 @@ def forecast(req: ForecastRequest):
     x = ((df.values[-ck["lookback"]:] - ck["x_mean"]) / ck["x_std"]).astype("float32")[None]
     with torch.no_grad():
         y = float(m(torch.tensor(x))) * ck["y_std"] + ck["y_mean"]
+    if ck.get("residual"):   # model predicts the change from the last reading
+        y += float(df["wind_speed"].values[-1])
     return {"turbine_id": req.turbine_id, "horizon_h": 1, "wind_speed_forecast": round(y, 3)}
 
 
