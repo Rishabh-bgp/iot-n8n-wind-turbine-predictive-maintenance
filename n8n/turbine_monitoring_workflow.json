@@ -1,5 +1,5 @@
 {
-  "name": "Wind turbine condition monitoring (reimplementation)",
+  "name": "Wind turbine condition monitoring (reference implementation)",
   "nodes": [
     {
       "parameters": {"httpMethod": "POST", "path": "turbine-telemetry", "responseMode": "lastNode", "options": {}},
@@ -9,7 +9,7 @@
     },
     {
       "parameters": {"jsCode": "const b = $input.first().json.body ?? $input.first().json;\nif (!b.turbine_id || !Array.isArray(b.readings)) { throw new Error('payload needs turbine_id and readings[]'); }\nconst clean = b.readings.filter(r => r.wind_speed >= 0 && r.wind_speed < 60);\nreturn [{ json: { turbine_id: b.turbine_id, readings: clean, vibration_rms: b.vibration_rms ?? 0, gearbox_temp: b.gearbox_temp ?? 60, power_residual: b.power_residual ?? 0 } }];"},
-      "id": "a1f0c0de-0002-4000-8000-000000000002", "name": "Clean and Normalise",
+      "id": "a1f0c0de-0002-4000-8000-000000000002", "name": "Clean and Normalize",
       "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [220, 0]
     },
     {
@@ -22,7 +22,7 @@
     {
       "parameters": {"method": "POST", "url": "={{ $env.FORECAST_API_URL || 'http://localhost:8000' }}/health-score",
         "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ turbine_id: $('Clean and Normalise').item.json.turbine_id, vibration_rms: $('Clean and Normalise').item.json.vibration_rms, gearbox_temp: $('Clean and Normalise').item.json.gearbox_temp, power_residual: $('Clean and Normalise').item.json.power_residual }) }}", "options": {}},
+        "jsonBody": "={{ JSON.stringify({ turbine_id: $('Clean and Normalize').item.json.turbine_id, vibration_rms: $('Clean and Normalize').item.json.vibration_rms, gearbox_temp: $('Clean and Normalize').item.json.gearbox_temp, power_residual: $('Clean and Normalize').item.json.power_residual }) }}", "options": {}},
       "id": "a1f0c0de-0004-4000-8000-000000000004", "name": "Call Health Scoring API",
       "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [660, 0]
     },
@@ -47,8 +47,8 @@
     }
   ],
   "connections": {
-    "Telemetry Webhook": {"main": [[{"node": "Clean and Normalise", "type": "main", "index": 0}]]},
-    "Clean and Normalise": {"main": [[{"node": "Call Forecasting API", "type": "main", "index": 0}]]},
+    "Telemetry Webhook": {"main": [[{"node": "Clean and Normalize", "type": "main", "index": 0}]]},
+    "Clean and Normalize": {"main": [[{"node": "Call Forecasting API", "type": "main", "index": 0}]]},
     "Call Forecasting API": {"main": [[{"node": "Call Health Scoring API", "type": "main", "index": 0}]]},
     "Call Health Scoring API": {"main": [[{"node": "Anomaly Check", "type": "main", "index": 0}]]},
     "Anomaly Check": {"main": [[{"node": "Raise Maintenance Request (Workflow 2)", "type": "main", "index": 0}],
